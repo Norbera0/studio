@@ -1,3 +1,10 @@
+import { PatientDashboard } from '@/components/patient-dashboard';
+import { getPatients } from '@/lib/data';
+
 export default function Home() {
-  return <></>;
+  const patients = getPatients();
+  
+  return (
+      <PatientDashboard initialPatients={patients} />
+  );
 }
