@@ -13,7 +13,7 @@ import {
   SidebarTrigger,
 } from '@/components/ui/sidebar';
 import Link from 'next/link';
-import { LayoutDashboard, UserPlus, File, User, Settings, LogIn, LogOut, Share2 } from 'lucide-react';
+import { LayoutDashboard, User, Settings, LogIn, LogOut } from 'lucide-react';
 import { Logo } from './icons/logo';
 import { usePathname } from 'next/navigation';
 import { Button } from './ui/button';
@@ -27,8 +27,37 @@ type AuthConfig = {
   google: { enabled: boolean; };
 };
 
+type UserMenuProps = {
+  authConfig: AuthConfig | null;
+  isAuthenticated: boolean;
+  onLogin: () => void;
+  onLogout: () => void;
+};
+
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const [authConfig, setAuthConfig] = useState<AuthConfig | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  useEffect(() => {
+    getAuthConfig().then(config => {
+      setAuthConfig(config);
+      // If Google Auth is not enabled, we treat the user as always authenticated.
+      if (!config.google.enabled) {
+        setIsAuthenticated(true);
+      }
+    });
+  }, []);
+
+  const handleGoogleLogin = () => {
+    // In a real app, this would redirect to the Google OAuth consent screen
+    alert("TODO: Implement Google OAuth login flow.");
+    setIsAuthenticated(true);
+  }
+
+  const handleLogout = () => {
+    setIsAuthenticated(false);
+  }
 
   return (
     <SidebarProvider>
@@ -58,7 +87,12 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           <div className="hidden md:block">
             <h2 className="text-lg font-semibold font-headline">Patient Management</h2>
           </div>
-          <UserMenu />
+          <UserMenu 
+            authConfig={authConfig} 
+            isAuthenticated={isAuthenticated} 
+            onLogin={handleGoogleLogin} 
+            onLogout={handleLogout} 
+          />
         </header>
         <main className="p-4 sm:p-6 lg:p-8 bg-background/80 min-h-[calc(100vh-4.5rem)]">
           {children}
@@ -69,31 +103,14 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 }
 
 
-function UserMenu() {
-  const [authConfig, setAuthConfig] = useState<AuthConfig | null>(null);
-  const [isAuthenticated, setIsAuthenticated] = useState(true); // Placeholder for auth state
-
-  useEffect(() => {
-    getAuthConfig().then(setAuthConfig);
-  }, []);
-
-  const handleGoogleLogin = () => {
-    // In a real app, this would redirect to the Google OAuth consent screen
-    alert("TODO: Implement Google OAuth login flow.");
-    setIsAuthenticated(true);
-  }
-
-  const handleLogout = () => {
-    setIsAuthenticated(false);
-  }
-
+function UserMenu({ authConfig, isAuthenticated, onLogin, onLogout }: UserMenuProps) {
   if (!authConfig) {
-    return <Skeleton className="h-9 w-9 rounded-full" />;
+    return <Skeleton className="h-9 w-28 rounded-md" />;
   }
 
   if (authConfig.google.enabled && !isAuthenticated) {
     return (
-      <Button onClick={handleGoogleLogin}>
+      <Button onClick={onLogin}>
         <LogIn className="mr-2 h-4 w-4" />
         Login with Google
       </Button>
@@ -105,34 +122,36 @@ function UserMenu() {
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" className="relative h-8 w-8 rounded-full">
           <Avatar className="h-9 w-9">
-            <AvatarImage src="https://placehold.co/100x100.png" alt="@shadcn" data-ai-hint="profile picture" />
-            <AvatarFallback>DR</AvatarFallback>
+            <AvatarImage src="https://placehold.co/100x100.png" alt="Banaag Dental" data-ai-hint="logo building" />
+            <AvatarFallback>BD</AvatarFallback>
           </Avatar>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent className="w-56" align="end" forceMount>
         <DropdownMenuLabel className="font-normal">
           <div className="flex flex-col space-y-1">
-            <p className="text-sm font-medium leading-none">Dr. Smith</p>
+            <p className="text-sm font-medium leading-none">Banaag Dental</p>
             <p className="text-xs leading-none text-muted-foreground">
-              dr.smith@dentalflow.com
+              contact@banaagdental.com
             </p>
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuItem>
           <User className="mr-2 h-4 w-4" />
-          <span>Profile</span>
+          <span>Clinic Profile</span>
         </DropdownMenuItem>
         <DropdownMenuItem>
           <Settings className="mr-2 h-4 w-4" />
           <span>Settings</span>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={handleLogout}>
-          <LogOut className="mr-2 h-4 w-4" />
-          <span>Log out</span>
-        </DropdownMenuItem>
+        {authConfig.google.enabled && (
+            <DropdownMenuItem onClick={onLogout}>
+              <LogOut className="mr-2 h-4 w-4" />
+              <span>Log out</span>
+            </DropdownMenuItem>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   )
