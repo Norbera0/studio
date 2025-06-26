@@ -38,7 +38,9 @@ export default function LoginPage() {
                 title: 'Login Successful',
                 description: 'Welcome back to DentalFlow!',
             });
-            router.push('/');
+            // Refresh the page. The middleware will intercept the request
+            // and redirect to the dashboard because the auth cookie is now set.
+            router.refresh();
         }, 1500);
     };
 
