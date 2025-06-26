@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import type { Patient, Treatment } from '@/lib/types';
-import { getAiDiagnosis } from '@/app/actions';
+import type { Patient, Treatment, DigitalFile } from '@/lib/types';
+import { getAiDiagnosis, getPatientFiles, addPatientFile, shareFileAction } from '@/app/actions';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -12,7 +12,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
-import { AlertTriangle, Bot, BrainCircuit, Camera, FileText, ImageIcon, Loader2, Sparkles, Stethoscope, Upload, User, ClipboardPlus } from 'lucide-react';
+import { AlertTriangle, Bot, BrainCircuit, Camera, FileText, Loader2, Sparkles, Stethoscope, Upload, User, ClipboardPlus, Share2, Copy } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
 import Image from 'next/image';
@@ -84,7 +84,7 @@ export function PatientProfileClientPage({ patient }: { patient: Patient }) {
           <TreatmentTimeline patientId={patient.id} />
         </TabsContent>
         <TabsContent value="files" className="mt-4">
-          <DigitalFiles />
+          <DigitalFiles patientId={patient.id} />
         </TabsContent>
         <TabsContent value="profile" className="mt-4">
           <PatientInfo patient={patient} />
@@ -309,22 +309,28 @@ function TreatmentTimeline({ patientId }: { patientId: number }) {
   )
 }
 
-function DigitalFiles() {
+function DigitalFiles({ patientId }: { patientId: number }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { toast } = useToast();
 
-  const [files, setFiles] = useState([
-    { name: 'Panorex - 2023-10-26', url: 'https://placehold.co/400x400.png', type: 'image' as const, hint: 'dental x-ray' },
-    { name: 'Intraoral - 2024-03-15', url: 'https://placehold.co/400x400.png', type: 'image' as const, hint: 'smile' }
-  ]);
+  const [files, setFiles] = useState<DigitalFile[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isUploading, setIsUploading] = useState(false);
+  
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
 
   useEffect(() => {
-    // Cleanup stream on component unmount
+    getPatientFiles(patientId).then(data => {
+      setFiles(data);
+      setIsLoading(false);
+    });
+  }, [patientId]);
+
+  useEffect(() => {
     return () => {
       if (stream) {
         stream.getTracks().forEach(track => track.stop());
@@ -335,17 +341,34 @@ function DigitalFiles() {
   const handleUploadClick = () => {
     fileInputRef.current?.click();
   };
+  
+  const processAndUploadFile = (file: File) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onloadend = async () => {
+      const dataUrl = reader.result as string;
+      const fileType = file.type.startsWith('image/') ? 'image' : (file.type === 'application/pdf' ? 'doc' : 'other');
+      
+      setIsUploading(true);
+      try {
+        const newFile = await addPatientFile(patientId, { name: file.name, url: dataUrl, type: fileType, hint: 'uploaded file' });
+        setFiles(prev => [...prev, newFile]);
+         toast({ title: "File Uploaded", description: `Successfully uploaded ${file.name}.` });
+      } catch (e) {
+        toast({ variant: 'destructive', title: "Upload Failed", description: "Could not upload the file." });
+      } finally {
+        setIsUploading(false);
+      }
+    };
+     reader.onerror = () => {
+      toast({ variant: 'destructive', title: "Read Failed", description: "Could not read the file." });
+    };
+  }
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      const newFile = {
-        name: file.name,
-        url: URL.createObjectURL(file),
-        type: file.type.startsWith('image/') ? 'image' : 'doc',
-        hint: 'uploaded file'
-      };
-      setFiles(prev => [...prev, newFile]);
+      processAndUploadFile(file);
     }
   };
 
@@ -385,7 +408,7 @@ function DigitalFiles() {
     }
     setStream(null);
     setIsCameraOpen(false);
-    setHasCameraPermission(null); // Reset permission state on close
+    setHasCameraPermission(null);
   }
 
   const handleCapture = () => {
@@ -396,17 +419,28 @@ function DigitalFiles() {
       canvas.height = video.videoHeight;
       const context = canvas.getContext('2d');
       context?.drawImage(video, 0, 0, video.videoWidth, video.videoHeight);
-      const dataUrl = canvas.toDataURL('image/png');
-      const newFile = {
-        name: `Capture - ${new Date().toLocaleDateString()}.png`,
-        url: dataUrl,
-        type: 'image' as const,
-        hint: 'patient photo'
-      };
-      setFiles(prev => [...prev, newFile]);
+      
+      canvas.toBlob(async (blob) => {
+        if(blob){
+          const capturedFile = new File([blob], `Capture - ${new Date().toISOString()}.png`, { type: 'image/png' });
+          processAndUploadFile(capturedFile);
+        }
+      }, 'image/png');
+      
       closeCamera();
     }
   };
+
+  const handleShare = async (file: DigitalFile) => {
+    const { success, url, error } = await shareFileAction(file);
+    if(success && url) {
+        navigator.clipboard.writeText(url);
+        toast({ title: "Link Copied!", description: "Shareable link copied to clipboard." });
+    } else {
+        toast({ variant: 'destructive', title: "Sharing Failed", description: error || "This file cannot be shared." });
+    }
+  }
+
 
   return (
     <>
@@ -423,38 +457,50 @@ function DigitalFiles() {
                 onChange={handleFileChange} 
                 className="hidden" 
                 accept="image/*,application/pdf,.doc,.docx"
+                disabled={isUploading}
               />
               <div className="flex flex-col sm:flex-row justify-center items-center gap-4">
-                  <Button onClick={handleUploadClick}>
-                    <Upload className="w-4 h-4 mr-2" />
-                    Upload File
+                  <Button onClick={handleUploadClick} disabled={isUploading}>
+                    {isUploading ? <Loader2 className="w-4 h-4 mr-2 animate-spin"/> : <Upload className="w-4 h-4 mr-2" />}
+                    {isUploading ? 'Uploading...' : 'Upload File'}
                   </Button>
-                  <Button onClick={openCamera} variant="outline">
+                  <Button onClick={openCamera} variant="outline" disabled={isUploading}>
                     <Camera className="w-4 h-4 mr-2" />
                     Take Photo
                   </Button>
               </div>
               <p className="mt-2 text-sm text-muted-foreground">Supports images and documents.</p>
           </div>
-          <div className="mt-6 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {files.length === 0 && (
-                <p className="text-muted-foreground text-center py-8 col-span-full">No files uploaded yet.</p>
-            )}
-            {files.map((file, index) => (
-              <div key={index} className="relative group aspect-square">
-                 {file.type === 'image' ? (
-                  <Image src={file.url} alt={file.name} layout="fill" className="rounded-lg object-cover" data-ai-hint={file.hint} />
-                 ) : (
-                  <div className="w-full h-full bg-muted rounded-lg flex flex-col items-center justify-center p-2">
-                    <FileText className="w-12 h-12 text-muted-foreground"/>
-                    <span className="text-xs text-center mt-2 text-muted-foreground break-words">{file.name}</span>
-                  </div>
-                 )}
-                <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity rounded-lg">
-                  <p className="text-white text-center text-sm font-semibold p-2">{file.name}</p>
+          <div className="mt-6">
+            {isLoading ? (
+                <div className="text-center p-8 text-muted-foreground flex items-center justify-center">
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading files...
                 </div>
+            ) : files.length === 0 ? (
+                <p className="text-muted-foreground text-center py-8 col-span-full">No files uploaded yet.</p>
+            ) : (
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                {files.map((file, index) => (
+                  <div key={index} className="relative group aspect-square">
+                    {file.type === 'image' ? (
+                      <Image src={file.url} alt={file.name} layout="fill" className="rounded-lg object-cover" data-ai-hint={file.hint} />
+                    ) : (
+                      <div className="w-full h-full bg-muted rounded-lg flex flex-col items-center justify-center p-2">
+                        <FileText className="w-12 h-12 text-muted-foreground"/>
+                        <span className="text-xs text-center mt-2 text-muted-foreground break-words">{file.name}</span>
+                      </div>
+                    )}
+                    <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center p-2 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg">
+                      <p className="text-white text-center text-xs font-semibold">{file.name}</p>
+                       <Button variant="secondary" size="sm" className="mt-2" onClick={() => handleShare(file)}>
+                          {file.provider === 'gdrive' ? <Share2 className="mr-2" /> : <Copy className="mr-2" />}
+                          {file.provider === 'gdrive' ? 'Share' : 'Copy Data'}
+                        </Button>
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))}
+            )}
           </div>
         </CardContent>
       </Card>

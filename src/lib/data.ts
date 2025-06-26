@@ -1,6 +1,7 @@
 import type { Patient } from './types';
 import fs from 'fs/promises';
 import path from 'path';
+import { config } from './config';
 
 const jsonFilePath = path.join(process.cwd(), 'src', 'lib', 'patients.json');
 
@@ -28,16 +29,35 @@ async function writePatients(patients: Patient[]): Promise<void> {
   }
 }
 
+
+// --- Public Service Interface ---
+
 export async function getPatients(): Promise<Patient[]> {
+  if (config.database.enabled) {
+    console.log('[DB TODO] Fetching patients from PostgreSQL database.');
+    // In a real implementation, you'd use a client like Prisma or pg here.
+    // Returning data from JSON file as a fallback for demonstration.
+    return readPatients();
+  }
   return await readPatients();
 }
 
 export async function getPatientById(id: number): Promise<Patient | undefined> {
+  if (config.database.enabled) {
+    console.log(`[DB TODO] Fetching patient ${id} from PostgreSQL database.`);
+    const patients = await readPatients();
+    return patients.find(p => p.id === id);
+  }
   const patients = await readPatients();
   return patients.find(p => p.id === id);
 }
 
 export async function addPatient(patientData: Omit<Patient, 'id' | 'avatarUrl'>): Promise<Patient> {
+    if (config.database.enabled) {
+      console.log(`[DB TODO] Adding patient "${patientData.name}" to PostgreSQL database.`);
+       // This would return a new patient record from the DB.
+    }
+
     const patients = await readPatients();
     const newId = patients.length > 0 ? Math.max(...patients.map(p => p.id)) + 1 : 1;
     

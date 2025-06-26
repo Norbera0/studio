@@ -23,3 +23,11 @@ export interface DentalChartMarking {
     color: string;
   };
 }
+
+export interface DigitalFile {
+  name: string;
+  url: string; // data URI or a future GDrive URL
+  type: 'image' | 'doc' | 'other';
+  hint?: string;
+  provider: 'gdrive' | 'local';
+}
