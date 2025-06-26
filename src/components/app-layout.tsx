@@ -30,33 +30,38 @@ type AuthConfig = {
 type UserMenuProps = {
   authConfig: AuthConfig | null;
   isAuthenticated: boolean;
-  onLogin: () => void;
   onLogout: () => void;
+  isLoading: boolean;
 };
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [authConfig, setAuthConfig] = useState<AuthConfig | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     getAuthConfig().then(config => {
       setAuthConfig(config);
-      // If Google Auth is not enabled, we treat the user as always authenticated.
+      const storedAuthStatus = localStorage.getItem('isAuthenticated') === 'true';
+      
       if (!config.google.enabled) {
         setIsAuthenticated(true);
+      } else {
+        setIsAuthenticated(storedAuthStatus);
       }
+      setIsLoading(false);
     });
-  }, []);
-
-  const handleGoogleLogin = () => {
-    // In a real app, this would redirect to the Google OAuth consent screen
-    alert("TODO: Implement Google OAuth login flow.");
-    setIsAuthenticated(true);
-  }
+  }, [pathname]); // Re-check auth status on page navigation
 
   const handleLogout = () => {
+    localStorage.removeItem('isAuthenticated');
     setIsAuthenticated(false);
+  }
+
+  // Hide layout on login page so it can be a standalone page
+  if (pathname === '/login') {
+    return <>{children}</>;
   }
 
   return (
@@ -90,8 +95,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           <UserMenu 
             authConfig={authConfig} 
             isAuthenticated={isAuthenticated} 
-            onLogin={handleGoogleLogin} 
             onLogout={handleLogout} 
+            isLoading={isLoading}
           />
         </header>
         <main className="p-4 sm:p-6 lg:p-8 bg-background/80 min-h-[calc(100vh-4.5rem)]">
@@ -103,16 +108,18 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 }
 
 
-function UserMenu({ authConfig, isAuthenticated, onLogin, onLogout }: UserMenuProps) {
-  if (!authConfig) {
+function UserMenu({ authConfig, isAuthenticated, onLogout, isLoading }: UserMenuProps) {
+  if (isLoading || !authConfig) {
     return <Skeleton className="h-9 w-28 rounded-md" />;
   }
 
   if (authConfig.google.enabled && !isAuthenticated) {
     return (
-      <Button onClick={onLogin}>
-        <LogIn className="mr-2 h-4 w-4" />
-        Login with Google
+      <Button asChild>
+        <Link href="/login">
+            <LogIn className="mr-2 h-4 w-4" />
+            Login
+        </Link>
       </Button>
     )
   }
