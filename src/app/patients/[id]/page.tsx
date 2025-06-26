@@ -8,15 +8,15 @@ type Props = {
 };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const patient = getPatientById(Number(params.id));
+  const patient = await getPatientById(Number(params.id));
 
   return {
     title: patient ? `${patient.name} | DentalFlow` : 'Patient Not Found',
   };
 }
 
-export default function PatientProfilePage({ params }: Props) {
-  const patient = getPatientById(Number(params.id));
+export default async function PatientProfilePage({ params }: Props) {
+  const patient = await getPatientById(Number(params.id));
 
   if (!patient) {
     notFound();

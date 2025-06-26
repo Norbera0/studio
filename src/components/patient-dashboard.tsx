@@ -13,7 +13,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { PlusCircle, Search } from 'lucide-react';
+import { Loader2, PlusCircle, Search } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import Link from 'next/link';
 import {
@@ -24,8 +24,31 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
-import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
+import { addPatient } from '@/app/actions';
+import { useToast } from '@/hooks/use-toast';
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form';
+
+const addPatientSchema = z.object({
+  name: z.string().min(1, { message: 'Name is required.' }),
+  phone: z.string().min(1, { message: 'Phone number is required.' }),
+  email: z.string().email({ message: 'Please enter a valid email.' }),
+  dateOfBirth: z.string().min(1, { message: 'Date of birth is required.' }),
+  medicalHistory: z.string().min(1, { message: 'Medical history is required. Enter "None" if not applicable.' }),
+  dentalHistory: z.string().min(1, { message: 'Dental history is required. Enter "None" if not applicable.' }),
+});
+
+type AddPatientFormValues = z.infer<typeof addPatientSchema>;
 
 export function PatientDashboard({ initialPatients }: { initialPatients: Patient[] }) {
   const [searchTerm, setSearchTerm] = useState('');
@@ -110,8 +133,51 @@ export function PatientDashboard({ initialPatients }: { initialPatients: Patient
 }
 
 function AddPatientDialog({ open, onOpenChange }: { open: boolean, onOpenChange: (open: boolean) => void }) {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const { toast } = useToast();
+
+  const form = useForm<AddPatientFormValues>({
+    resolver: zodResolver(addPatientSchema),
+    defaultValues: {
+      name: '',
+      phone: '',
+      email: '',
+      dateOfBirth: '',
+      medicalHistory: '',
+      dentalHistory: '',
+    },
+  });
+
+  const handleOpenChange = (isOpen: boolean) => {
+    if (isSubmitting) return;
+    onOpenChange(isOpen);
+    if (!isOpen) {
+      form.reset();
+    }
+  };
+
+  const onSubmit = async (values: AddPatientFormValues) => {
+    setIsSubmitting(true);
+    const result = await addPatient(values);
+    setIsSubmitting(false);
+
+    if (result.success) {
+      toast({
+        title: 'Patient Added',
+        description: `${result.patient?.name} has been successfully added.`,
+      });
+      handleOpenChange(false);
+    } else {
+      toast({
+        variant: 'destructive',
+        title: 'Error Adding Patient',
+        description: result.error || 'An unknown error occurred.',
+      });
+    }
+  };
+  
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-[600px]">
         <DialogHeader>
           <DialogTitle className='font-headline'>Add New Patient</DialogTitle>
@@ -119,36 +185,97 @@ function AddPatientDialog({ open, onOpenChange }: { open: boolean, onOpenChange:
             Enter the patient's details below. Click save when you're done.
           </DialogDescription>
         </DialogHeader>
-        <div className="grid gap-4 py-4">
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="name" className="text-right">Name</Label>
-            <Input id="name" placeholder="Jane Doe" className="col-span-3" />
-          </div>
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="phone" className="text-right">Phone</Label>
-            <Input id="phone" placeholder="555-0101" className="col-span-3" />
-          </div>
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="email" className="text-right">Email</Label>
-            <Input id="email" type="email" placeholder="jane.d@example.com" className="col-span-3" />
-          </div>
-           <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="dob" className="text-right">Date of Birth</Label>
-            <Input id="dob" type="date" className="col-span-3" />
-          </div>
-          <div className="grid grid-cols-4 items-start gap-4">
-            <Label htmlFor="medical-history" className="text-right pt-2">Medical History</Label>
-            <Textarea id="medical-history" placeholder="Any known allergies, conditions..." className="col-span-3" />
-          </div>
-           <div className="grid grid-cols-4 items-start gap-4">
-            <Label htmlFor="dental-history" className="text-right pt-2">Dental History</Label>
-            <Textarea id="dental-history" placeholder="Previous treatments, concerns..." className="col-span-3" />
-          </div>
-        </div>
-        <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button type="submit">Save Patient</Button>
-        </DialogFooter>
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Name</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Jane Doe" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="dateOfBirth"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Date of Birth</FormLabel>
+                    <FormControl>
+                      <Input type="date" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="phone"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Phone</FormLabel>
+                    <FormControl>
+                      <Input placeholder="555-0101" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Email</FormLabel>
+                    <FormControl>
+                      <Input type="email" placeholder="jane.d@example.com" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+             <FormField
+                control={form.control}
+                name="medicalHistory"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Medical History</FormLabel>
+                    <FormControl>
+                      <Textarea placeholder="Any known allergies, conditions... (e.g., None)" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="dentalHistory"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Dental History</FormLabel>
+                    <FormControl>
+                      <Textarea placeholder="Previous treatments, concerns... (e.g., None)" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => handleOpenChange(false)} disabled={isSubmitting}>Cancel</Button>
+              <Button type="submit" disabled={isSubmitting}>
+                {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Save Patient
+              </Button>
+            </DialogFooter>
+          </form>
+        </Form>
       </DialogContent>
     </Dialog>
   )
