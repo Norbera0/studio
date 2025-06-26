@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import type { Patient, Treatment } from '@/lib/types';
 import { getAiDiagnosis } from '@/app/actions';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -12,11 +12,13 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
-import { AlertTriangle, Bot, BrainCircuit, FileText, ImageIcon, Loader2, Sparkles, Stethoscope, Upload, User, ClipboardPlus } from 'lucide-react';
+import { AlertTriangle, Bot, BrainCircuit, Camera, FileText, ImageIcon, Loader2, Sparkles, Stethoscope, Upload, User, ClipboardPlus } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
 import Image from 'next/image';
 import type { AIDiagnosisAssistantOutput } from '@/ai/flows/ai-diagnosis-assistant';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 const DENTAL_CONDITIONS = {
   healthy: { label: 'Healthy', color: 'bg-green-200 hover:bg-green-300 border-green-400' },
@@ -308,37 +310,190 @@ function TreatmentTimeline({ patientId }: { patientId: number }) {
 }
 
 function DigitalFiles() {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const { toast } = useToast();
+
+  const [files, setFiles] = useState([
+    { name: 'Panorex - 2023-10-26', url: 'https://placehold.co/400x400.png', type: 'image' as const, hint: 'dental x-ray' },
+    { name: 'Intraoral - 2024-03-15', url: 'https://placehold.co/400x400.png', type: 'image' as const, hint: 'smile' }
+  ]);
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
+  const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null);
+  const [stream, setStream] = useState<MediaStream | null>(null);
+
+  useEffect(() => {
+    // Cleanup stream on component unmount
+    return () => {
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, [stream]);
+
+  const handleUploadClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      const newFile = {
+        name: file.name,
+        url: URL.createObjectURL(file),
+        type: file.type.startsWith('image/') ? 'image' : 'doc',
+        hint: 'uploaded file'
+      };
+      setFiles(prev => [...prev, newFile]);
+    }
+  };
+
+  const openCamera = async () => {
+    setHasCameraPermission(null);
+    setIsCameraOpen(true);
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      try {
+        const mediaStream = await navigator.mediaDevices.getUserMedia({ video: true });
+        setStream(mediaStream);
+        if (videoRef.current) {
+          videoRef.current.srcObject = mediaStream;
+        }
+        setHasCameraPermission(true);
+      } catch (error) {
+        console.error('Error accessing camera:', error);
+        setHasCameraPermission(false);
+        toast({
+          variant: 'destructive',
+          title: 'Camera Access Denied',
+          description: 'Please enable camera permissions in your browser settings.',
+        });
+      }
+    } else {
+      setHasCameraPermission(false);
+       toast({
+          variant: 'destructive',
+          title: 'Camera Not Supported',
+          description: 'Your browser does not support camera access.',
+        });
+    }
+  };
+  
+  const closeCamera = () => {
+    if (stream) {
+      stream.getTracks().forEach(track => track.stop());
+    }
+    setStream(null);
+    setIsCameraOpen(false);
+    setHasCameraPermission(null); // Reset permission state on close
+  }
+
+  const handleCapture = () => {
+    if (videoRef.current && canvasRef.current) {
+      const canvas = canvasRef.current;
+      const video = videoRef.current;
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const context = canvas.getContext('2d');
+      context?.drawImage(video, 0, 0, video.videoWidth, video.videoHeight);
+      const dataUrl = canvas.toDataURL('image/png');
+      const newFile = {
+        name: `Capture - ${new Date().toLocaleDateString()}.png`,
+        url: dataUrl,
+        type: 'image' as const,
+        hint: 'patient photo'
+      };
+      setFiles(prev => [...prev, newFile]);
+      closeCamera();
+    }
+  };
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="font-headline">Digital Files</CardTitle>
-        <CardDescription>Upload and manage patient photos, X-rays, and documents.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="p-6 border-2 border-dashed rounded-lg text-center bg-secondary/30">
-            <Upload className="mx-auto h-12 w-12 text-muted-foreground" />
-            <h3 className="mt-2 text-sm font-medium text-gray-900">Drop files here or click to upload</h3>
-            <p className="mt-1 text-sm text-muted-foreground">Supports images and documents.</p>
-            <Button className="mt-4">
-              <Upload className="w-4 h-4 mr-2" />
-              Upload File
+    <>
+      <Card>
+        <CardHeader>
+          <CardTitle className="font-headline">Digital Files</CardTitle>
+          <CardDescription>Upload and manage patient photos, X-rays, and documents.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="p-6 border-2 border-dashed rounded-lg text-center bg-secondary/30">
+              <input 
+                type="file" 
+                ref={fileInputRef} 
+                onChange={handleFileChange} 
+                className="hidden" 
+                accept="image/*,application/pdf,.doc,.docx"
+              />
+              <div className="flex flex-col sm:flex-row justify-center items-center gap-4">
+                  <Button onClick={handleUploadClick}>
+                    <Upload className="w-4 h-4 mr-2" />
+                    Upload File
+                  </Button>
+                  <Button onClick={openCamera} variant="outline">
+                    <Camera className="w-4 h-4 mr-2" />
+                    Take Photo
+                  </Button>
+              </div>
+              <p className="mt-2 text-sm text-muted-foreground">Supports images and documents.</p>
+          </div>
+          <div className="mt-6 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            {files.length === 0 && (
+                <p className="text-muted-foreground text-center py-8 col-span-full">No files uploaded yet.</p>
+            )}
+            {files.map((file, index) => (
+              <div key={index} className="relative group aspect-square">
+                 {file.type === 'image' ? (
+                  <Image src={file.url} alt={file.name} layout="fill" className="rounded-lg object-cover" data-ai-hint={file.hint} />
+                 ) : (
+                  <div className="w-full h-full bg-muted rounded-lg flex flex-col items-center justify-center p-2">
+                    <FileText className="w-12 h-12 text-muted-foreground"/>
+                    <span className="text-xs text-center mt-2 text-muted-foreground break-words">{file.name}</span>
+                  </div>
+                 )}
+                <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity rounded-lg">
+                  <p className="text-white text-center text-sm font-semibold p-2">{file.name}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Dialog open={isCameraOpen} onOpenChange={(open) => !open && closeCamera()}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle className="font-headline">Capture Photo</DialogTitle>
+          </DialogHeader>
+            <div className="min-h-[400px] flex items-center justify-center bg-secondary rounded-md">
+            {hasCameraPermission === null && (
+                <div className="flex flex-col items-center justify-center h-full">
+                    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                    <p className="mt-2 text-muted-foreground">Requesting camera access...</p>
+                </div>
+            )}
+            {hasCameraPermission === false && (
+                <Alert variant="destructive" className="w-auto">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertTitle>Camera Access Denied</AlertTitle>
+                <AlertDescription>
+                    Please allow camera access in your browser settings.
+                </AlertDescription>
+                </Alert>
+            )}
+            <div className={hasCameraPermission ? 'block w-full' : 'hidden'}>
+                <video ref={videoRef} className="w-full aspect-video rounded-md bg-black" autoPlay muted playsInline />
+                <canvas ref={canvasRef} className="hidden" />
+            </div>
+            </div>
+          <DialogFooter className="mt-4">
+            <Button variant="outline" onClick={closeCamera}>Cancel</Button>
+            <Button onClick={handleCapture} disabled={!hasCameraPermission}>
+                <Camera className="w-4 h-4 mr-2" />
+                Capture
             </Button>
-        </div>
-        <div className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="relative group aspect-square">
-            <Image src="https://placehold.co/400x400.png" alt="X-ray" layout="fill" className="rounded-lg object-cover" data-ai-hint="dental x-ray" />
-            <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-              <p className="text-white text-sm font-semibold">Panorex - 2023-10-26</p>
-            </div>
-          </div>
-          <div className="relative group aspect-square">
-            <Image src="https://placehold.co/400x400.png" alt="Patient photo" layout="fill" className="rounded-lg object-cover" data-ai-hint="smile" />
-            <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-              <p className="text-white text-sm font-semibold">Intraoral - 2024-03-15</p>
-            </div>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }
