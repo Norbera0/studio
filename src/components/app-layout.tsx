@@ -38,7 +38,11 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [authConfig, setAuthConfig] = useState<AuthConfig | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   useEffect(() => {
     getAuthConfig().then(config => {
@@ -50,7 +54,6 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       } else {
         setIsAuthenticated(storedAuthStatus);
       }
-      setIsLoading(false);
     });
   }, [pathname]); // Re-check auth status on page navigation
 
@@ -63,6 +66,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   if (pathname === '/login') {
     return <>{children}</>;
   }
+
+  const isLoading = !isMounted;
 
   return (
     <SidebarProvider>
