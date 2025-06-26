@@ -370,6 +370,10 @@ function DigitalFiles({ patientId }: { patientId: number }) {
     if (file) {
       processAndUploadFile(file);
     }
+    // Reset file input to allow uploading the same file again
+    if (event.target) {
+      event.target.value = '';
+    }
   };
 
   const openCamera = async () => {
@@ -493,7 +497,7 @@ function DigitalFiles({ patientId }: { patientId: number }) {
                     <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center p-2 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg">
                       <p className="text-white text-center text-xs font-semibold">{file.name}</p>
                        <Button variant="secondary" size="sm" className="mt-2" onClick={() => handleShare(file)}>
-                          {file.provider === 'gdrive' ? <Share2 className="mr-2" /> : <Copy className="mr-2" />}
+                          {file.provider === 'gdrive' ? <Share2 className="mr-2 h-4 w-4" /> : <Copy className="mr-2 h-4 w-4" />}
                           {file.provider === 'gdrive' ? 'Share' : 'Copy Data'}
                         </Button>
                     </div>
