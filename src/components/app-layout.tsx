@@ -13,9 +13,9 @@ import {
   SidebarTrigger,
 } from '@/components/ui/sidebar';
 import Link from 'next/link';
-import { LayoutDashboard, User, Settings, LogIn, LogOut } from 'lucide-react';
+import { LayoutDashboard, User, Settings, LogIn, LogOut, Loader2 } from 'lucide-react';
 import { Logo } from './icons/logo';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { Button } from './ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from './ui/dropdown-menu';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
@@ -36,18 +36,18 @@ type UserMenuProps = {
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [authConfig, setAuthConfig] = useState<AuthConfig | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
     setIsMounted(true);
-  }, []);
-
-  useEffect(() => {
     getAuthConfig().then(config => {
       setAuthConfig(config);
-      const storedAuthStatus = localStorage.getItem('isAuthenticated') === 'true';
+      const storedAuthStatus = document.cookie
+        .split('; ')
+        .some((item) => item.startsWith('isAuthenticated=true'));
       
       if (!config.google.enabled) {
         setIsAuthenticated(true);
@@ -58,8 +58,9 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   }, [pathname]); // Re-check auth status on page navigation
 
   const handleLogout = () => {
-    localStorage.removeItem('isAuthenticated');
+    document.cookie = 'isAuthenticated=; path=/; max-age=0';
     setIsAuthenticated(false);
+    router.push('/login');
   }
 
   // Hide layout on login page so it can be a standalone page
@@ -68,6 +69,16 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   }
 
   const isLoading = !isMounted;
+  
+  // While checking auth state on the client, show a loader to avoid flicker.
+  // This also prevents hydration errors.
+  if (isLoading) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center bg-background">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <SidebarProvider>

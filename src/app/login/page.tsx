@@ -32,9 +32,8 @@ export default function LoginPage() {
         // In a real app, this would trigger the Google OAuth flow.
         // We'll simulate it with a timeout.
         setTimeout(() => {
-            // On successful login, we'd get user info and a token.
-            // We'll just store a flag in localStorage.
-            localStorage.setItem('isAuthenticated', 'true');
+            // On successful login, we set a cookie for the middleware to read.
+            document.cookie = 'isAuthenticated=true; path=/; max-age=604800'; // 7 days
             toast({
                 title: 'Login Successful',
                 description: 'Welcome back to DentalFlow!',
